@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Calculadora de Recompensas – War Thunder (SL y RP)</title>
+  <style>
+    :root { --bg:#0f1115; --card:#171923; --muted:#aab0c0; --fg:#e7e9ee; --accent:#7dd3fc; --ok:#22c55e; --warn:#fbbf24; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, "Apple Color Emoji","Segoe UI Emoji"; background: var(--bg); color: var(--fg); }
+    .wrap { max-width: 980px; margin: 24px auto; padding: 0 16px; }
+    h1 { font-size: 1.6rem; margin: 0 0 12px; }
+    p { color: var(--muted); margin: 0 0 12px; }
+    .card { background: var(--card); border: 1px solid #1f2330; border-radius: 16px; padding: 16px; box-shadow: 0 8px 24px rgba(0,0,0,.35); margin-bottom: 16px; }
+    .row { display: grid; grid-template-columns: repeat(12, 1fr); gap: 12px; align-items: center; }
+    .row + .row { margin-top: 10px; }
+    label { font-size: .85rem; color: var(--muted); display: block; margin-bottom: 6px; }
+    input, button, select { width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid #2a2f3f; background: #11131a; color: var(--fg); }
+    input:focus, select:focus { outline: 2px solid #334155; border-color: #334155; }
+    button { background: #0b1220; cursor: pointer; border: 1px solid #2a2f3f; }
+    .btn { display:inline-flex; align-items:center; gap:8px; padding:10px 14px; border-radius:12px; }
+    .btn-primary { background: linear-gradient(135deg,#0ea5e9,#38bdf8); border: none; color:#06121b; font-weight:700; }
+    .btn-ghost { background: #0f1115; }
+    .btn-danger { background: #2a1111; border: 1px solid #532323; color:#fca5a5; }
+    .muted { color: var(--muted); }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 8px; text-align: left; border-bottom: 1px dashed #23283a; }
+    th { font-weight: 600; color: var(--muted); }
+    .kpi { display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap:12px; }
+    .kpi .item { background:#121522; border:1px solid #262a3c; border-radius:14px; padding:12px; }
+    .kpi .item h3 { margin:0; font-size:.9rem; color:var(--muted); }
+    .kpi .item p { margin:6px 0 0; font-size:1.3rem; font-weight:800; color:#eaeefb; }
+    .mono { font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    .small { font-size: .85rem; }
+    .hint { color: var(--muted); font-size: .8rem; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Calculadora de Recompensas – War Thunder (SL & RP)</h1>
+    <p>Estimador universal y <strong>calibrable</strong> en base a tus partidas. Ingresá tus datos y obtené una predicción aproximada de <em>Leones de Plata (SL)</em> y <em>Puntos de Investigación (RP)</em>.</p>
+
+    <div class="card">
+      <h2 style="margin-top:0">1) Calibración (opcional pero recomendado)</h2>
+      <p>Agregá 1 o más partidas históricas con sus recompensas reales. El modelo ajusta una regresión: <span class="mono">Recompensa ≈ a·Puntos + b·Minutos + c·Muertes + d</span>. Con 1 fila se usa el ratio por punto (d=0).</p>
+
+      <div style="overflow-x:auto">
+        <table id="calibTable">
+          <thead>
+            <tr>
+              <th>Minutos jugados<br><span class="hint">Ej.: <span class="mono">44:53</span> o <span class="mono">44.883</span></span></th>
+              <th>Puntos (score)</th>
+              <th>Muertes</th>
+              <th>SL reales</th>
+              <th>RP reales</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="calibBody"></tbody>
+        </table>
+      </div>
+      <div style="display:flex; gap:8px; margin-top:10px">
+        <button class="btn btn-ghost" onclick="addRow()">➕ Agregar fila</button>
+        <button class="btn btn-danger" onclick="clearRows()">🗑️ Vaciar</button>
+      </div>
+      <p class="hint" style="margin-top:8px">Sugerencia: cargá partidas de un mismo modo/rango (y si tenés cuenta/vehículo/boosters iguales) para mayor coherencia.</p>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top:0">2) Predicción</h2>
+      <div class="row">
+        <div style="grid-column: span 4">
+          <label for="predMinutes">Minutos jugados</label>
+          <input id="predMinutes" placeholder="mm:ss o minutos decimales" />
+        </div>
+        <div style="grid-column: span 4">
+          <label for="predScore">Puntos (score)</label>
+          <input id="predScore" type="number" inputmode="numeric" />
+        </div>
+        <div style="grid-column: span 2">
+          <label for="predDeaths">Muertes</label>
+          <input id="predDeaths" type="number" inputmode="numeric" />
+        </div>
+        <div style="grid-column: span 2; align-self:end">
+          <button class="btn btn-primary" onclick="predict()">Calcular</button>
+        </div>
+      </div>
+
+      <div class="kpi" style="margin-top:14px">
+        <div class="item"><h3>SL estimados</h3><p class="mono" id="outSL">–</p></div>
+        <div class="item"><h3>RP estimados</h3><p class="mono" id="outRP">–</p></div>
+        <div class="item"><h3>SPM (score/min)</h3><p class="mono" id="outSPM">–</p></div>
+      </div>
+
+      <details style="margin-top:12px"><summary class="small">Ver coeficientes del modelo</summary>
+        <div class="row" style="margin-top:10px">
+          <div style="grid-column: span 6">
+            <label>Coeficientes SL (a, b, c, d)</label>
+            <input id="coefSL" class="mono" readonly />
+          </div>
+          <div style="grid-column: span 6">
+            <label>Coeficientes RP (a, b, c, d)</label>
+            <input id="coefRP" class="mono" readonly />
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top:0">3) Ayudín: Convertir HH:MM:SS → minutos</h2>
+      <div class="row">
+        <div style="grid-column: span 4">
+          <label for="tStart">Hora inicio (HH:MM:SS)</label>
+          <input id="tStart" placeholder="04:00:36" />
+        </div>
+        <div style="grid-column: span 4">
+          <label for="tEnd">Hora fin (HH:MM:SS)</label>
+          <input id="tEnd" placeholder="04:45:29" />
+        </div>
+        <div style="grid-column: span 2; align-self:end">
+          <button class="btn" onclick="calcMinutes()">Convertir</button>
+        </div>
+        <div style="grid-column: span 2">
+          <label>Minutos</label>
+          <input id="tOut" class="mono" readonly />
+        </div>
+      </div>
+    </div>
+
+    <p class="small muted">Notas: este estimador no replica las fórmulas internas de Gaijin. Los resultados varían por modo (AB/RB/SB), rango de vehículo, multiplicadores de cuenta/vehículo/premium, boosters, tipo de misión y actividad. Para mejor precisión, calibrá con partidas de condiciones similares.</p>
+  </div>
+
+  <script>
+    const $ = sel => document.querySelector(sel);
+
+    function parseMinutes(val){
+      if(!val) return NaN;
+      val = (""+val).trim();
+      if(val.includes(':')){
+        const parts = val.split(':').map(s=>s.trim());
+        if(parts.length===3){
+          const [h,m,s] = parts.map(Number);
+          return h*60 + m + s/60;
+        } else if(parts.length===2){
+          const [m,s] = parts.map(Number);
+          return m + s/60;
+        }
+      }
+      const x = Number(val.replace(',', '.'));
+      return isFinite(x) ? x : NaN;
+    }
+
+    function fmtInt(n){
+      if(!isFinite(n)) return '–';
+      return Math.round(n).toLocaleString('es-AR');
+    }
+
+    function fmt4(n){
+      if(!isFinite(n)) return '–';
+      return Number(n).toFixed(4);
+    }
+
+    function addRow(data={}){
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><input placeholder="44:53" value="${data.minutes??''}"/></td>
+        <td><input type="number" inputmode="numeric" placeholder="639" value="${data.score??''}"/></td>
+        <td><input type="number" inputmode="numeric" placeholder="1" value="${data.deaths??''}"/></td>
+        <td><input type="number" inputmode="numeric" placeholder="33155" value="${data.sl??''}"/></td>
+        <td><input type="number" inputmode="numeric" placeholder="6177" value="${data.rp??''}"/></td>
+        <td><button class="btn btn-danger" onclick="this.closest('tr').remove()">Eliminar</button></td>
+      `;
+      $('#calibBody').appendChild(tr);
+    }
+
+    function clearRows(){ $('#calibBody').innerHTML = ''; }
+
+    // --- tiny linear algebra ---
+    function transpose(A){ return A[0].map((_,i)=>A.map(r=>r[i])); }
+    function matMul(A,B){ // A(nxm) * B(mxp)
+      const n=A.length, m=A[0].length, p=B[0].length;
+      const R=Array.from({length:n},()=>Array(p).fill(0));
+      for(let i=0;i<n;i++) for(let k=0;k<m;k++) for(let j=0;j<p;j++) R[i][j]+=A[i][k]*B[k][j];
+      return R;
+    }
+    function matVec(A,v){ const n=A.length, m=A[0].length; const r=Array(n).fill(0); for(let i=0;i<n;i++){ let s=0; for(let k=0;k<m;k++) s+=A[i][k]*v[k]; r[i]=s; } return r; }
+    function inv(M){
+      const n=M.length; const A=M.map(r=>r.slice()); const I=Array.from({length:n},(_,i)=>Array.from({length:n},(__,j)=>i===j?1:0));
+      for(let i=0;i<n;i++){
+        // pivot
+        let pivot=i; for(let r=i+1;r<n;r++) if(Math.abs(A[r][i])>Math.abs(A[pivot][i])) pivot=r;
+        if(Math.abs(A[pivot][i])<1e-9) throw new Error('singular');
+        if(pivot!==i){ [A[i],A[pivot]]=[A[pivot],A[i]]; [I[i],I[pivot]]=[I[pivot],I[i]]; }
+        const diag=A[i][i]; for(let j=0;j<n;j++){ A[i][j]/=diag; I[i][j]/=diag; }
+        for(let r=0;r<n;r++) if(r!==i){ const f=A[r][i]; for(let j=0;j<n;j++){ A[r][j]-=f*A[i][j]; I[r][j]-=f*I[i][j]; } }
+      }
+      return I;
+    }
+
+    function fitCoeffs(rows){
+      // rows: {minutes, score, deaths, sl, rp}
+      const clean = rows.filter(r=>isFinite(r.minutes) && isFinite(r.score) && isFinite(r.deaths) && (isFinite(r.sl) || isFinite(r.rp)));
+      if(clean.length===0) return { sl:[NaN,NaN,NaN,NaN], rp:[NaN,NaN,NaN,NaN] };
+
+      // With 1 row, fall back to per-point ratios (no minutes/deaths/intercept influence)
+      if(clean.length===1){
+        const r = clean[0];
+        const aSL = isFinite(r.sl) && r.score? (r.sl/r.score) : 0;
+        const aRP = isFinite(r.rp) && r.score? (r.rp/r.score) : 0;
+        return { sl:[aSL,0,0,0], rp:[aRP,0,0,0] };
+      }
+
+      // Build X with [score, minutes, deaths, 1]
+      const X = clean.map(r=>[r.score, r.minutes, r.deaths, 1]);
+      const Xt = transpose(X);
+      const XtX = matMul(Xt, X);
+      let invXtX;
+      try { invXtX = inv(XtX); }
+      catch(e){
+        // Fall back: remove deaths column if singular, then if still singular go to per-point
+        try {
+          const X2 = clean.map(r=>[r.score, r.minutes, 1]);
+          const Xt2 = transpose(X2);
+          const inv2 = inv(matMul(Xt2,X2));
+          const ySL2 = clean.map(r=>r.sl??0);
+          const yRP2 = clean.map(r=>r.rp??0);
+          const bSL2 = matMul(matMul(inv2, Xt2), ySL2.map(v=>[v])).map(r=>r[0]);
+          const bRP2 = matMul(matMul(inv2, Xt2), yRP2.map(v=>[v])).map(r=>r[0]);
+          return { sl:[bSL2[0], bSL2[1], 0, bSL2[2]], rp:[bRP2[0], bRP2[1], 0, bRP2[2]] };
+        } catch(e2){
+          const r = clean[0];
+          const aSL = isFinite(r.sl) && r.score? (r.sl/r.score) : 0;
+          const aRP = isFinite(r.rp) && r.score? (r.rp/r.score) : 0;
+          return { sl:[aSL,0,0,0], rp:[aRP,0,0,0] };
+        }
+      }
+
+      const ySL = clean.map(r=>r.sl??0);
+      const yRP = clean.map(r=>r.rp??0);
+      const Bsl = matMul(matMul(invXtX, Xt), ySL.map(v=>[v]));
+      const Brp = matMul(matMul(invXtX, Xt), yRP.map(v=>[v]));
+      const bsl = Bsl.map(r=>r[0]);
+      const brp = Brp.map(r=>r[0]);
+      return { sl:bsl, rp:brp };
+    }
+
+    function predict(){
+      const rows = [...document.querySelectorAll('#calibBody tr')].map(tr=>{
+        const tds = tr.querySelectorAll('td input');
+        const minutes = parseMinutes(tds[0].value);
+        const score = Number(tds[1].value);
+        const deaths = Number(tds[2].value);
+        const sl = tds[3].value === '' ? NaN : Number(tds[3].value);
+        const rp = tds[4].value === '' ? NaN : Number(tds[4].value);
+        return { minutes, score, deaths, sl, rp };
+      });
+
+      const coefs = fitCoeffs(rows);
+      $('#coefSL').value = coefs.sl.map(fmt4).join(', ');
+      $('#coefRP').value = coefs.rp.map(fmt4).join(', ');
+
+      const m = parseMinutes($('#predMinutes').value);
+      const s = Number($('#predScore').value);
+      const d = Number($('#predDeaths').value);
+      const X = [s, m, d, 1];
+      const sl = coefs.sl.reduce((acc,c,i)=>acc + c*X[i], 0);
+      const rp = coefs.rp.reduce((acc,c,i)=>acc + c*X[i], 0);
+      $('#outSL').textContent = fmtInt(sl);
+      $('#outRP').textContent = fmtInt(rp);
+      const spm = m>0 && isFinite(s) ? (s/m) : NaN;
+      $('#outSPM').textContent = isFinite(spm) ? spm.toFixed(2) : '–';
+    }
+
+    function calcMinutes(){
+      const t0 = $('#tStart').value.trim();
+      const t1 = $('#tEnd').value.trim();
+      const toSec = t => { const [H,M,S] = t.split(':').map(Number); return (H*3600 + M*60 + S)|0; };
+      if(!/^\d{2}:\d{2}:\d{2}$/.test(t0) || !/^\d{2}:\d{2}:\d{2}$/.test(t1)) { $('#tOut').value = 'formato inválido'; return; }
+      let dt = toSec(t1) - toSec(t0);
+      if(dt < 0) dt += 24*3600; // por si cruza medianoche
+      $('#tOut').value = (dt/60).toFixed(3);
+    }
+
+    // Seed: ejemplo que diste
+    addRow({ minutes: '44:53', score: 639, deaths: 1, sl: 33155, rp: 6177 });
+
+    // Seed: rellenar inputs de predicción para que puedas probar ya
+    $('#predMinutes').value = '25:31';
+    $('#predScore').value = 781;
+    $('#predDeaths').value = 0;
+
+    // Primer cálculo automático al cargar
+    setTimeout(predict, 50);
+  </script>
+</body>
+</html>
